@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/blesswinsamuel/kgen/internal"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
@@ -65,7 +66,7 @@ func (a *builder) WriteYAMLsToDisk(opts WriteOpts) error {
 		return fmt.Errorf("constructFilenameToApiObjectsMap: %w", err)
 	}
 	fileContents := map[string][]byte{}
-	for _, currentScopeID := range MapKeysSorted(files) {
+	for _, currentScopeID := range internal.MapKeysSorted(files) {
 		apiObjects := files[currentScopeID]
 		filePath := path.Join(opts.Outdir, fmt.Sprintf("%s.yaml", currentScopeID))
 		for i, apiObject := range apiObjects {

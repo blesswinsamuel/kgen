@@ -4,9 +4,7 @@ go 1.22.3
 
 require (
 	github.com/goccy/go-yaml v1.11.3
-	github.com/rs/zerolog v1.33.0
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842
-	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.30.2
 )
 

@@ -1,4 +1,4 @@
-package kgen
+package internal
 
 import (
 	"slices"

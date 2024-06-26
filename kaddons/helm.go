@@ -1,20 +1,21 @@
 package kaddons
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 
-	"github.com/blesswinsamuel/kgen"
-	"github.com/rs/zerolog/log"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 type HelmChartInfo struct {
@@ -29,62 +30,86 @@ type HelmChartProps struct {
 	ReleaseName         string
 	Namespace           string
 	Values              map[string]interface{}
-	PatchObject         func(resource *unstructured.Unstructured)
+
+	CacheDir        string
+	HelmKubeVersion string
+	Logger          Logger
 }
 
-func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
-	opts := getOptions(scope)
-	chartsCacheDir := path.Join(opts.CacheDir, "charts")
-	if err := os.MkdirAll(chartsCacheDir, os.ModePerm); err != nil {
-		log.Panic().Err(err).Msg("MkdirAll failed")
+type Logger interface {
+	Infof(msg string, args ...interface{})
+	Warnf(msg string, args ...interface{})
+}
+
+type CustomLogger struct {
+	InfoFn func(msg string, args ...interface{})
+	WarnFn func(msg string, args ...interface{})
+}
+
+func (l CustomLogger) Infof(msg string, args ...interface{}) {
+	if l.InfoFn == nil {
+		l.InfoFn = log.Printf
+	}
+	l.InfoFn(msg, args...)
+}
+
+func (l CustomLogger) Warnf(msg string, args ...interface{}) {
+	if l.WarnFn == nil {
+		l.WarnFn = log.Printf
+	}
+	l.WarnFn(msg, args...)
+}
+
+func ExecHelmTemplateAndGetObjects(props HelmChartProps) ([]runtime.Object, error) {
+	if props.Logger == nil {
+		props.Logger = CustomLogger{}
+	}
+	if err := os.MkdirAll(props.CacheDir, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("MkdirAll failed: %w", err)
 	}
 	if _, err := exec.LookPath("helm"); err != nil {
-		log.Panic().Err(err).Msg("helm LookPath failed")
+		return nil, fmt.Errorf("helm not found in PATH: %w", err)
 	}
 	if props.ChartInfo.Repo == "" {
-		log.Panic().Msgf("helm chart repo is empty for %s", props.ReleaseName)
+		return nil, errors.New("helm chart repo is empty")
 	}
 	if props.ChartInfo.Chart == "" {
-		log.Panic().Msgf("helm chart name is empty for %s", props.ReleaseName)
+		return nil, errors.New("helm chart name is empty")
 	}
 	if props.ChartInfo.Version == "" {
-		log.Panic().Msgf("helm chart version is empty for %s", props.ReleaseName)
+		return nil, errors.New("helm chart version is empty")
 	}
 	chartFileName := props.ChartInfo.Chart + "-" + props.ChartInfo.Version + ".tgz"
 	if props.ChartFileNamePrefix != "" {
 		chartFileName = props.ChartFileNamePrefix + props.ChartInfo.Version + ".tgz"
 	}
-	chartPath := fmt.Sprintf("%s/%s", chartsCacheDir, chartFileName)
+	chartPath := path.Join(props.CacheDir, chartFileName)
 	if _, err := os.Stat(chartPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Info().Msgf("Fetching chart '%s' from repo '%s' version '%s'...", props.ChartInfo.Chart, props.ChartInfo.Repo, props.ChartInfo.Version)
-			cmd := exec.Command("helm", "pull", props.ChartInfo.Chart, "--repo", props.ChartInfo.Repo, "--destination", chartsCacheDir, "--version", props.ChartInfo.Version)
+			props.Logger.Infof("Fetching chart '%s' from repo '%s' version '%s'...", props.ChartInfo.Chart, props.ChartInfo.Repo, props.ChartInfo.Version)
+			cmd := exec.Command("helm", "pull", props.ChartInfo.Chart, "--repo", props.ChartInfo.Repo, "--destination", props.CacheDir, "--version", props.ChartInfo.Version)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				fmt.Println(string(out))
-				log.Panic().Err(err).Msg("Error occured during helm pull command")
+				return nil, fmt.Errorf("helm pull failed: %w", err)
 			} else {
 				if len(out) > 0 {
-					log.Warn().Str("output", string(out)).Msgf("Received unexpected output from helm pull command for chart '%s'", props.ChartInfo.Chart)
+					fmt.Println(string(out))
+					props.Logger.Warnf("Received unexpected output from helm pull command for chart '%s'", props.ChartInfo.Chart)
 				}
 			}
 		} else {
-			log.Panic().Err(err).Msg("Error occured while checking if chart exists in cache")
+			return nil, fmt.Errorf("error occured while checking if chart exists in cache: %w", err)
 		}
 	}
-	namespace := props.Namespace
-	if namespace == "" {
-		namespace = scope.Namespace()
-	}
-
 	cmd := exec.Command(
 		"helm",
 		"template",
 		props.ReleaseName,
 		chartPath,
 		"--namespace",
-		namespace,
+		props.Namespace,
 		"--kube-version",
-		opts.HelmKubeVersion,
+		props.HelmKubeVersion,
 		"--include-crds",
 		"--skip-tests",
 		"--no-hooks",
@@ -93,7 +118,7 @@ func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 	)
 	valuesJson, err := json.Marshal(props.Values)
 	if err != nil {
-		log.Panic().Err(err).Msg("Failed to convert to JSON")
+		return nil, fmt.Errorf("json marshal failed: %w", err)
 	}
 	cmd.Stdin = strings.NewReader(string(valuesJson))
 	out, err := cmd.Output()
@@ -101,28 +126,33 @@ func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 		if ee, ok := err.(*exec.ExitError); ok {
 			fmt.Println(string(ee.Stderr))
 		}
-		log.Panic().Err(err).Msg("helm template failed")
+		return nil, fmt.Errorf("helm template failed: %w", err)
 	}
 
-	dec := yaml.NewDecoder(bytes.NewReader(out))
-	i := 0
+	reader := yaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(out)))
+	var objects []runtime.Object
 	for {
-		i++
 		var obj map[string]any
-		err := dec.Decode(&obj)
+
+		bytes, err := reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			log.Panic().Err(err).Msg("Error decoding yaml")
+			return nil, fmt.Errorf("error decoding yaml: %w", err)
+		}
+		if len(bytes) == 0 {
+			continue
+		}
+
+		if err := yaml.Unmarshal(bytes, &obj); err != nil {
+			return nil, fmt.Errorf("error decoding yaml: %w", err)
 		}
 		if len(obj) == 0 {
 			continue
 		}
 		runtimeObj := &unstructured.Unstructured{Object: obj}
-		if props.PatchObject != nil {
-			props.PatchObject(runtimeObj)
-		}
-		scope.AddApiObject(runtimeObj)
+		objects = append(objects, runtimeObj)
 	}
+	return objects, nil
 }
