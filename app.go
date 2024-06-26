@@ -2,31 +2,27 @@ package kgen
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"strings"
 
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/blesswinsamuel/infra-base/infrahelpers"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	k8sjson "k8s.io/apimachinery/pkg/runtime/serializer/json"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
 type App interface {
 	Scope
-	OutDir() string
-	WriteYAMLsToDisk()
+	WriteYAMLsToDisk() error
 }
 
 type AppProps struct {
-	Outdir       string
-	CacheDir     string
-	DeleteOutDir bool
-	PatchNdots   bool
+	Outdir        string
+	CacheDir      string
+	DeleteOutDir  bool
+	PatchObject   func(ApiObject) error
+	SchemeBuilder runtime.SchemeBuilder
 }
 
 type app struct {
@@ -35,66 +31,50 @@ type app struct {
 }
 
 func NewApp(props AppProps) App {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(props.SchemeBuilder.AddToScheme(scheme))
+	codecFectory := serializer.NewCodecFactory(scheme)
+	// deserializer := codecFectory.UniversalDeserializer()
+
+	// info, _ := runtime.SerializerInfoForMediaType(codecFectory.SupportedMediaTypes(), runtime.ContentTypeYAML)
+	// encoder := info.Serializer
+	// serializer := codecFectory.EncoderForVersion(encoder, runtime.InternalGroupVersioner)
+
+	yamlSerializer := k8sjson.NewSerializerWithOptions(
+		k8sjson.DefaultMetaFactory, scheme, scheme,
+		k8sjson.SerializerOptions{Pretty: true, Yaml: true, Strict: true},
+	)
+	jsonSerializer := k8sjson.NewSerializerWithOptions(
+		k8sjson.DefaultMetaFactory, scheme, scheme,
+		k8sjson.SerializerOptions{Pretty: true, Yaml: false, Strict: true},
+	)
+
 	return &app{
-		Scope: newScope("$$root", ScopeProps{}),
+		Scope: newScope("$$root", ScopeProps{}, &globalContext{
+			scheme:         scheme,
+			codecFactory:   codecFectory,
+			jsonSerializer: jsonSerializer,
+			yamlSerializer: yamlSerializer,
+		}),
 		props: props,
 	}
 }
 
-func patchObject(apiObject ApiObject) {
-	dnsConfig := &corev1.PodDNSConfig{
-		Options: []corev1.PodDNSConfigOption{
-			{Name: "ndots", Value: infrahelpers.Ptr("1")},
-		},
-	}
-	switch apiObject.GetKind() {
-	case "Deployment":
-		modifyObj(apiObject, func(deployment *appsv1.Deployment) {
-			deployment.Spec.Template.Spec.DNSConfig = dnsConfig
-		})
-	case "StatefulSet":
-		modifyObj(apiObject, func(statefulset *appsv1.StatefulSet) {
-			statefulset.Spec.Template.Spec.DNSConfig = dnsConfig
-		})
-	case "DaemonSet":
-		modifyObj(apiObject, func(statefulset *appsv1.DaemonSet) {
-			statefulset.Spec.Template.Spec.DNSConfig = dnsConfig
-		})
-	case "CronJob":
-		modifyObj(apiObject, func(cronjob *batchv1.CronJob) {
-			cronjob.Spec.JobTemplate.Spec.Template.Spec.DNSConfig = dnsConfig
-		})
-	}
-}
-
-func modifyObj[T any](apiObject ApiObject, f func(*T)) {
-	var res T
-	statefulsetUnstructured := apiObject.GetObject().(*unstructured.Unstructured)
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(statefulsetUnstructured.UnstructuredContent(), &res)
-	if err != nil {
-		log.Fatalf("FromUnstructured: %v", err)
-	}
-	f(&res)
-	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&res)
-	if err != nil {
-		log.Fatalf("ToUnstructured: %v", err)
-	}
-	apiObject.SetObject(unstructured.Unstructured{Object: unstructuredObj})
-}
-
-func (a *app) WriteYAMLsToDisk() {
+func (a *app) WriteYAMLsToDisk() error {
 	fileNo := 0
 	files := map[string][]ApiObject{}
-	var prepareFiles func(scope *scope, currentChartID []string, level int)
-	prepareFiles = func(scope *scope, currentChartID []string, level int) {
+	var prepareFiles func(scope *scope, currentChartID []string, level int) error
+	prepareFiles = func(scope *scope, currentChartID []string, level int) error {
 		if scope == nil {
-			return
+			return nil
 		}
 		objects := []ApiObject{}
 		chartCount := 0
 		for _, object := range scope.objects {
-			if a.props.PatchNdots {
-				patchObject(object)
+			if a.props.PatchObject != nil {
+				if err := a.props.PatchObject(object); err != nil {
+					return fmt.Errorf("PatchObject: %w", err)
+				}
 			}
 			objects = append(objects, object)
 		}
@@ -107,7 +87,9 @@ func (a *app) WriteYAMLsToDisk() {
 			chartCount++
 			thisChartID = append(thisChartID, fmt.Sprintf("%02d", chartCount), childNode.ID())
 			// fmt.Println(strings.Join(currentChartID, "-"), reflect.TypeOf(childNode.value), thisChartID)
-			prepareFiles(childNode, thisChartID, level+1)
+			if err := prepareFiles(childNode, thisChartID, level+1); err != nil {
+				return fmt.Errorf("prepareFiles: %w", err)
+			}
 		}
 		if len(objects) > 0 {
 			currentChartID := strings.Join(currentChartID, "-")
@@ -116,10 +98,13 @@ func (a *app) WriteYAMLsToDisk() {
 			}
 			files[currentChartID] = append(files[currentChartID], objects...)
 		}
+		return nil
 	}
-	prepareFiles(a.Scope.(*scope), []string{}, 0)
+	if err := prepareFiles(a.Scope.(*scope), []string{}, 0); err != nil {
+		return fmt.Errorf("prepareFiles: %w", err)
+	}
 	fileContents := map[string][]byte{}
-	for _, currentChartID := range infrahelpers.MapKeys(files) {
+	for _, currentChartID := range MapKeysSorted(files) {
 		apiObjects := files[currentChartID]
 		filePath := path.Join(a.props.Outdir, fmt.Sprintf("%s.yaml", currentChartID))
 		// fmt.Println(filePath, len(apiObjects))
@@ -133,19 +118,16 @@ func (a *app) WriteYAMLsToDisk() {
 	}
 	if a.props.DeleteOutDir {
 		if err := os.RemoveAll(a.props.Outdir); err != nil {
-			log.Fatalf("RemoveAll: %v", err)
+			return fmt.Errorf("RemoveAll: %w", err)
 		}
 	}
 	if err := os.MkdirAll(a.props.Outdir, 0755); err != nil {
-		log.Fatalf("MkdirAll: %v", err)
+		return fmt.Errorf("MkdirAll: %w", err)
 	}
 	for filePath, fileContent := range fileContents {
 		if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
-			log.Fatalf("WriteFile: %v", err)
+			return fmt.Errorf("WriteFile: %w", err)
 		}
 	}
-}
-
-func (a *app) OutDir() string {
-	return a.props.Outdir
+	return nil
 }

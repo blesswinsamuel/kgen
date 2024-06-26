@@ -1,8 +1,8 @@
 package kgen
 
 import (
-	"github.com/blesswinsamuel/infra-base/infrahelpers"
-	"github.com/rs/zerolog/log"
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -22,19 +22,21 @@ type ScopeProps struct {
 }
 
 type scope struct {
-	id       string
-	props    ScopeProps
-	context  map[string]any
-	parent   *scope
-	children []*scope
-	objects  []ApiObject
+	id            string
+	props         ScopeProps
+	globalContext *globalContext
+	context       map[string]any
+	parent        *scope
+	children      []*scope
+	objects       []ApiObject
 }
 
-func newScope(id string, props ScopeProps) Scope {
+func newScope(id string, props ScopeProps, globalContext *globalContext) Scope {
 	scope := &scope{
-		id:      id,
-		props:   props,
-		context: map[string]any{},
+		id:            id,
+		props:         props,
+		context:       map[string]any{},
+		globalContext: globalContext,
 	}
 	if props.Namespace != "" {
 		scope.context["namespace"] = props.Namespace
@@ -42,60 +44,60 @@ func newScope(id string, props ScopeProps) Scope {
 	return scope
 }
 
-func (c *scope) SetContext(key string, value any) {
-	c.context[key] = value
+func (s *scope) SetContext(key string, value any) {
+	s.context[key] = value
 }
 
-func (c *scope) GetContext(key string) any {
-	for s := c; s != nil; s = s.parent {
+func (s *scope) GetContext(key string) any {
+	for s := s; s != nil; s = s.parent {
 		if ctx, ok := s.context[key]; ok {
 			return ctx
 		}
 	}
-	return c.context[key]
+	return s.context[key]
 }
 
-func (c *scope) ID() string {
-	return c.id
+func (s *scope) ID() string {
+	return s.id
 }
 
-func (c *scope) CreateScope(id string, props ScopeProps) Scope {
-	childScope := newScope(id, props).(*scope)
-	childScope.parent = c
-	c.children = append(c.children, childScope)
+func (s *scope) CreateScope(id string, props ScopeProps) Scope {
+	childScope := newScope(id, props, s.globalContext).(*scope)
+	childScope.parent = s
+	s.children = append(s.children, childScope)
 	return childScope
 }
 
-func (c *scope) Namespace() string {
-	return c.GetContext("namespace").(string)
+func (s *scope) Namespace() string {
+	return s.GetContext("namespace").(string)
 }
 
-func (c *scope) AddApiObject(obj runtime.Object) ApiObject {
-	groupVersionKinds, _, err := infrahelpers.Scheme.ObjectKinds(obj)
+func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
+	groupVersionKinds, _, err := s.globalContext.scheme.ObjectKinds(obj)
 	if err != nil {
-		log.Panic().Err(err).Msg("ObjectKinds")
+		panic(fmt.Errorf("ObjectKinds: %w", err))
 	}
 	if len(groupVersionKinds) != 1 {
-		log.Panic().Msgf("expected 1 groupVersionKind, got %d: %v", len(groupVersionKinds), groupVersionKinds)
+		panic(fmt.Errorf("expected 1 groupVersionKind, got %d: %v", len(groupVersionKinds), groupVersionKinds))
 	}
 	groupVersion := groupVersionKinds[0]
-	mobj := infrahelpers.K8sObjectToMap(obj)
+	mobj := s.globalContext.k8sObjectToMap(obj)
 	mobj["apiVersion"] = groupVersion.GroupVersion().String()
 	mobj["kind"] = groupVersion.Kind
-	return c.AddApiObjectFromMap(mobj)
+	return s.AddApiObjectFromMap(mobj)
 }
 
-func (c *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
-	props := ApiObjectProps{Unstructured: unstructured.Unstructured{Object: obj}}
+func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
+	props := ApiObjectProps{Unstructured: &unstructured.Unstructured{Object: obj}}
 	if props.GetNamespace() == "" {
-		if namespaceCtx := getNamespaceContext(c); namespaceCtx != "" {
+		namespaceCtx, _ := s.GetContext("namespace").(string)
+		if namespaceCtx != "" {
 			props.SetNamespace(namespaceCtx)
 		}
 	}
 
-	apiObject := &apiObject{ApiObjectProps: props}
+	apiObject := &apiObject{ApiObjectProps: props, globalContext: s.globalContext}
 
-	// fmt.Println(apiObject.GetKind(), apiObject.GetAPIVersion())
-	c.objects = append(c.objects, apiObject)
+	s.objects = append(s.objects, apiObject)
 	return apiObject
 }

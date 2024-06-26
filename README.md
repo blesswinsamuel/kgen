@@ -12,4 +12,6 @@ Kube GoGen allows us to define our Kubernetes resources in Go code, and then gen
 
 ## Documentation
 
-Coming soon. This package will be moved out into a separate repository. In the meantime, see how this is being used in the k8sbase package.
+```go
+
+```

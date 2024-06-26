@@ -10,36 +10,43 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-type ApiObject interface { // Object
+type ApiObject interface {
 	metav1.Type
 	metav1.Object
 	ToYAML() []byte
 	GetObject() runtime.Object
-	SetObject(v unstructured.Unstructured)
+	SetObject(v *unstructured.Unstructured)
 }
 
 type ApiObjectProps struct {
-	unstructured.Unstructured
-}
-
-func getNamespaceContext(scope Scope) string {
-	ns, _ := scope.GetContext("namespace").(string)
-	return ns
+	*unstructured.Unstructured
 }
 
 type apiObject struct {
 	ApiObjectProps
+	globalContext *globalContext
 }
 
 func (a *apiObject) GetObject() runtime.Object {
-	return &a.Unstructured
+	return a.Unstructured
 }
 
-func (a *apiObject) SetObject(v unstructured.Unstructured) {
+func (a *apiObject) SetObject(v *unstructured.Unstructured) {
 	a.Unstructured = v
 }
 
 func (a *apiObject) ToYAML() []byte {
+	// // reference: https://github.com/kubernetes/cli-runtime/blob/8e480ebaa098dffbb0bd05f3d7b47b1d1d2d4847/pkg/printers/yaml.go#L75-L84
+	// if a.Unstructured.GetObjectKind().GroupVersionKind().Empty() {
+	// 	panic("missing apiVersion or kind; try GetObjectKind().SetGroupVersionKind() if you know the type")
+	// }
+
+	// output, err := yaml.Marshal(a.Unstructured)
+	// if err != nil {
+	// 	panic(fmt.Errorf("yaml.Marshal: %w", err))
+	// }
+	// return output
+
 	b := bytes.NewBuffer(nil)
 	enc := yaml.NewEncoder(b, yaml.IndentSequence(true), yaml.UseLiteralStyleIfMultiline(true), yaml.UseSingleQuote(false))
 	sortedMap := yaml.MapSlice{}
