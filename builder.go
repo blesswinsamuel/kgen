@@ -60,7 +60,9 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 }
 
 func (a *builder) WriteYAMLsToDisk(opts WriteOpts) error {
-	a.Scope.(*scope).patchObjects(opts.PatchObject)
+	if opts.PatchObject != nil {
+		a.Scope.(*scope).patchObjects(opts.PatchObject)
+	}
 	files := map[string][]ApiObject{} // map[filename]apiObjects
 	if err := constructFilenameToApiObjectsMap(files, a.Scope.(*scope), []string{}, 0); err != nil {
 		return fmt.Errorf("constructFilenameToApiObjectsMap: %w", err)
