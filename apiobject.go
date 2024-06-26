@@ -16,7 +16,7 @@ type ApiObject interface {
 	metav1.Object
 	ToYAML() []byte
 	GetObject() runtime.Object
-	SetObject(v *unstructured.Unstructured)
+	ReplaceObject(v runtime.Object)
 }
 
 type ApiObjectProps struct {
@@ -28,12 +28,22 @@ type apiObject struct {
 	globalContext *globalContext
 }
 
+var _ ApiObject = &apiObject{}
+
 func (a *apiObject) GetObject() runtime.Object {
 	return a.Unstructured
 }
 
-func (a *apiObject) SetObject(v *unstructured.Unstructured) {
-	a.Unstructured = v
+func (a *apiObject) ReplaceObject(obj runtime.Object) {
+	if objUnstructured, ok := obj.(*unstructured.Unstructured); ok {
+		a.Unstructured = objUnstructured
+		return
+	}
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		panic(err)
+	}
+	a.Unstructured = &unstructured.Unstructured{Object: unstructuredObj}
 }
 
 func (a *apiObject) ToYAML() []byte {

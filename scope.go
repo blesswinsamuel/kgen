@@ -23,7 +23,6 @@ type ScopeProps struct {
 
 type scope struct {
 	id            string
-	props         ScopeProps
 	globalContext *globalContext
 	context       map[string]any
 	parent        *scope
@@ -34,12 +33,11 @@ type scope struct {
 func newScope(id string, props ScopeProps, globalContext *globalContext) Scope {
 	scope := &scope{
 		id:            id,
-		props:         props,
 		context:       map[string]any{},
 		globalContext: globalContext,
 	}
 	if props.Namespace != "" {
-		scope.context["namespace"] = props.Namespace
+		scope.context[namespaceContextKey] = props.Namespace
 	}
 	return scope
 }
@@ -69,7 +67,7 @@ func (s *scope) CreateScope(id string, props ScopeProps) Scope {
 }
 
 func (s *scope) Namespace() string {
-	return s.GetContext("namespace").(string)
+	return s.GetContext(namespaceContextKey).(string)
 }
 
 func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
@@ -93,7 +91,7 @@ func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
 func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
 	props := ApiObjectProps{Unstructured: &unstructured.Unstructured{Object: obj}}
 	if props.GetNamespace() == "" {
-		namespaceCtx, _ := s.GetContext("namespace").(string)
+		namespaceCtx, _ := s.GetContext(namespaceContextKey).(string)
 		if namespaceCtx != "" {
 			props.SetNamespace(namespaceCtx)
 		}

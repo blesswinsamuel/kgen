@@ -27,18 +27,17 @@ type BuilderOptions struct {
 
 type builder struct {
 	Scope
-	opts BuilderOptions
 }
 
 func NewBuilder(opts BuilderOptions) Builder {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(opts.SchemeBuilder.AddToScheme(scheme))
 
+	scope := newScope("__root__", ScopeProps{}, &globalContext{
+		scheme: scheme,
+	})
 	return &builder{
-		Scope: newScope("__root__", ScopeProps{}, &globalContext{
-			scheme: scheme,
-		}),
-		opts: opts,
+		Scope: scope,
 	}
 }
 
