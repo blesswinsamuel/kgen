@@ -81,7 +81,10 @@ func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
 		panic(fmt.Errorf("expected 1 groupVersionKind, got %d: %v", len(groupVersionKinds), groupVersionKinds))
 	}
 	groupVersion := groupVersionKinds[0]
-	mobj := s.globalContext.k8sObjectToMap(obj)
+	mobj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		panic(fmt.Errorf("k8sObjectToMap: %w", err))
+	}
 	mobj["apiVersion"] = groupVersion.GroupVersion().String()
 	mobj["kind"] = groupVersion.Kind
 	return s.AddApiObjectFromMap(mobj)
@@ -100,4 +103,18 @@ func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
 
 	s.objects = append(s.objects, apiObject)
 	return apiObject
+}
+
+func (s *scope) patchObjects(patchFn func(ApiObject) error) error {
+	for _, object := range s.objects {
+		if err := patchFn(object); err != nil {
+			return fmt.Errorf("PatchObject: %w", err)
+		}
+	}
+	for _, childNode := range s.children {
+		if err := childNode.patchObjects(patchFn); err != nil {
+			return fmt.Errorf("patchObjects: %w", err)
+		}
+	}
+	return nil
 }
