@@ -99,7 +99,7 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 			files[filePath] = append(files[filePath], scope.objects...)
 		case YamlOutputTypeFilePerResource:
 			for i, apiObject := range scope.objects {
-				filePath := fmt.Sprintf("%s-%02d-%s", strings.Join(currentScopeID, "-"), i+1, getObjectNameAndNamespace(apiObject))
+				filePath := strings.Join([]string{strings.Join(currentScopeID, "-"), sprintfWithNumber(i+1, getObjectNameAndNamespace(apiObject))}, "-")
 				files[filePath] = append(files[filePath], apiObject)
 			}
 		case YamlOutputTypeFilePerScope:
@@ -122,9 +122,9 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 			files[filePath] = append(files[filePath], scope.objects...)
 		}
 	}
-	for i, childNode := range scope.children {
-		thisScopeID := append(currentScopeID, sprintfWithNumber(i+1, childNode.ID()))
-		constructFilenameToApiObjectsMap(files, childNode, thisScopeID, level+1, opts)
+	for i, childScope := range scope.children {
+		thisScopeID := append(currentScopeID, sprintfWithNumber(i+1, childScope.ID()))
+		constructFilenameToApiObjectsMap(files, childScope, thisScopeID, level+1, opts)
 	}
 }
 
