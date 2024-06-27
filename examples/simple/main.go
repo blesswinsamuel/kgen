@@ -81,7 +81,7 @@ func main() {
 		},
 	})
 	builder.RenderManifests(kgen.RenderManifestsOptions{
-		Outdir:       "k8s-generated",
+		Outdir:       "k8s-rendered",
 		DeleteOutDir: true,
 	})
 }
