@@ -39,9 +39,10 @@ func main() {
 	AddMyCert(myCertScope)
 
 	builder.RenderManifests(kgen.RenderManifestsOptions{
-		Outdir:         "k8s-rendered",
-		YamlOutputType: kgen.YamlOutputTypeFilePerScope,
-		DeleteOutDir:   true,
+		Outdir:                   "k8s-rendered",
+		YamlOutputType:           kgen.YamlOutputTypeFilePerScope,
+		DeleteOutDir:             true,
+		IncludeNumberInFilenames: true,
 	})
 }
 
