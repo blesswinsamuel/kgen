@@ -11,20 +11,24 @@ import (
 	// "sigs.k8s.io/yaml"
 )
 
+// ApiObject is an interface that represents a Kubernetes object.
 type ApiObject interface {
 	metav1.Type
 	metav1.Object
+	// ToYAML returns the YAML representation of the object.
 	ToYAML() []byte
+	// GetObject returns the underlying Kubernetes object.
 	GetObject() runtime.Object
+	// ReplaceObject replaces the underlying Kubernetes object.
 	ReplaceObject(v runtime.Object)
 }
 
-type ApiObjectProps struct {
+type apiObjectProps struct {
 	*unstructured.Unstructured
 }
 
 type apiObject struct {
-	ApiObjectProps
+	apiObjectProps
 	globalContext *globalContext
 }
 

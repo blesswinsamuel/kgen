@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 )
 
+// GenerateContextKey generates a random string to be used as a context key
 func GenerateContextKey() string {
 	length := 10
 	bytes := make([]byte, length)

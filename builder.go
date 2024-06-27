@@ -41,14 +41,18 @@ type RenderManifestsOptions struct {
 	PatchObject func(ApiObject) error
 }
 
+// Builder is the main interface for adding Kubernetes API objects and rendering them to YAML files.
 type Builder interface {
 	Scope
+	// RenderManifests writes the Kubernetes API objects to disk or stdout in YAML format.
 	RenderManifests(opts RenderManifestsOptions)
 }
 
 type BuilderOptions struct {
+	// SchemeBuilder is used to add custom Kubernetes API types to the scheme.
 	SchemeBuilder runtime.SchemeBuilder
-	Logger        Logger
+	// Logger is used to log messages. If not set, a default logger is used.
+	Logger Logger
 }
 
 type builder struct {
@@ -60,7 +64,11 @@ type globalContext struct {
 	logger Logger
 }
 
+// NewBuilder creates a new Builder instance.
 func NewBuilder(opts BuilderOptions) Builder {
+	if opts.SchemeBuilder == nil {
+		panic("SchemeBuilder is required")
+	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(opts.SchemeBuilder.AddToScheme(scheme))
 
@@ -133,7 +141,6 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 	}
 }
 
-// RenderManifests writes the ApiObjects to disk or stdout in YAML format.
 func (a *builder) RenderManifests(opts RenderManifestsOptions) {
 	if opts.PatchObject != nil {
 		if err := a.Scope.WalkApiObjects(opts.PatchObject); err != nil {

@@ -18,24 +18,36 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
+// HelmChartInfo represents the information required to fetch a helm chart
 type HelmChartInfo struct {
-	Repo    string
-	Chart   string
+	// Repo is the helm chart repository
+	Repo string
+	// Chart is the helm chart name
+	Chart string
+	// Version is the helm chart version
 	Version string
 }
 
+// HelmChartProps represents the properties required to add a helm chart to the scope.
 type HelmChartProps struct {
-	ChartInfo           HelmChartInfo
+	// ChartInfo is the information required to fetch a helm chart.
+	ChartInfo HelmChartInfo
+	// ChartFileNamePrefix is the prefix to be used for the chart file name.
 	ChartFileNamePrefix string
-	ReleaseName         string
-	Namespace           string
-	Values              map[string]interface{}
-	PatchObject         func(obj runtime.Object) error
+	// ReleaseName is the release name to be used while executing helm template.
+	ReleaseName string
+	// Namespace is the namespace to be used while executing helm template. Defaults to the scope's namespace.
+	Namespace string
+	// Values is the values to be passed to helm template.
+	Values map[string]interface{}
+	// PatchObject is the function to be used to patch the object before adding it to the scope. Default is nil.
+	PatchObject func(obj runtime.Object) error
 }
 
+// AddHelmChart runs helm template and adds the generated objects to the scope.
 func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 	opts := getOptions(scope)
-	objects, err := ExecHelmTemplateAndGetObjects(HelmTemplateOptions{
+	objects, err := execHelmTemplateAndGetObjects(helmTemplateOptions{
 		ChartInfo:           props.ChartInfo,
 		Namespace:           scope.Namespace(),
 		ChartFileNamePrefix: props.ChartFileNamePrefix,
@@ -58,7 +70,7 @@ func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 	}
 }
 
-type HelmTemplateOptions struct {
+type helmTemplateOptions struct {
 	ChartInfo           HelmChartInfo
 	ChartFileNamePrefix string
 	ReleaseName         string
@@ -70,7 +82,7 @@ type HelmTemplateOptions struct {
 	Logger          kgen.Logger
 }
 
-func ExecHelmTemplateAndGetObjects(props HelmTemplateOptions) ([]runtime.Object, error) {
+func execHelmTemplateAndGetObjects(props helmTemplateOptions) ([]runtime.Object, error) {
 	if props.Logger == nil {
 		props.Logger = kgen.NewCustomLogger(nil)
 	}

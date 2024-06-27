@@ -8,17 +8,27 @@ import (
 )
 
 type Scope interface {
+	// ID returns the identifier of the scope.
 	ID() string
+	// Namespace returns the namespace of the scope. It searches the current scope and its parents.
 	Namespace() string
+	// CreateScope creates a new scope, nested under the current scope.
 	CreateScope(id string, props ScopeProps) Scope
+	// GetContext returns the value of the given context key. It searches the current scope and its parents.
 	GetContext(key string) any
+	// SetContext sets the value of the given context key.
 	SetContext(key string, value any)
+	// AddApiObject adds a new API object to the scope.
 	AddApiObject(obj runtime.Object) ApiObject
+	// AddApiObjectFromMap adds a new API object to the scope from an arbitrary map.
 	AddApiObjectFromMap(props map[string]any) ApiObject
+	// WalkApiObjects walks through all the API objects in the scope and its children.
 	WalkApiObjects(walkFn func(ApiObject) error) error
+	// Logger returns the logger that was passed to the builder.
 	Logger() Logger
 }
 
+// ScopeProps is the properties for creating a new scope.
 type ScopeProps struct {
 	Namespace string
 }
@@ -100,7 +110,7 @@ func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
 }
 
 func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
-	props := ApiObjectProps{Unstructured: &unstructured.Unstructured{Object: obj}}
+	props := apiObjectProps{Unstructured: &unstructured.Unstructured{Object: obj}}
 	if props.GetNamespace() == "" {
 		namespaceCtx, _ := s.GetContext(namespaceContextKey).(string)
 		if namespaceCtx != "" {
@@ -108,7 +118,7 @@ func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
 		}
 	}
 
-	apiObject := &apiObject{ApiObjectProps: props, globalContext: s.globalContext}
+	apiObject := &apiObject{apiObjectProps: props, globalContext: s.globalContext}
 
 	s.objects = append(s.objects, apiObject)
 	return apiObject
