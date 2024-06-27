@@ -5,7 +5,9 @@ kgen is a Go library to generate Kubernetes manifests using Go code.
 ## Why?
 
 I used Helm for a while to generate Kubernetes manifests for my homelab. Helm is a great tool, but maintaining the complex helm templates became a pain, especially without the IDE's autocompletion and type checking.
-I tried cdk8s, which is also a great tool that provides autocompletion and type checking, but it requires code generation for custom resources, and the huge number of files it generated caused my IDE to slow down, and I found it slow because it uses JavaScript under the hood to generate the manifests.
+
+I tried cdk8s, which is a great tool that provides autocompletion and type checking. It was a huge step up over helm, but it requires code generation for custom resources, and the huge number of files it generated caused my IDE to slow down, and I found it slow to run as it uses JavaScript under the hood to generate the manifests.
+
 Since all if not most of the operators that have CRDs are written in Go (feel free to raise an issue if I'm wrong), and the Go structs are already available, I thought it would be great to use Go to generate the manifests. That's why I created kgen to generate Kubernetes manifests using Go code.
 
 ## Features
