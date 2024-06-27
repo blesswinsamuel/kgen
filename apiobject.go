@@ -37,11 +37,10 @@ func (a *apiObject) GetObject() runtime.Object {
 func (a *apiObject) ReplaceObject(obj runtime.Object) {
 	if objUnstructured, ok := obj.(*unstructured.Unstructured); ok {
 		a.Unstructured = objUnstructured
-		return
 	}
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		panic(err)
+		a.globalContext.logger.Panicf("failed to convert object to unstructured: %v", err)
 	}
 	a.Unstructured = &unstructured.Unstructured{Object: unstructuredObj}
 }
@@ -78,7 +77,7 @@ func (a *apiObject) ToYAML() []byte {
 	}
 	err := enc.Encode(sortedMap)
 	if err != nil {
-		panic(err)
+		a.globalContext.logger.Panicf("failed to convert to yaml: %v", err)
 	}
 	return b.Bytes()
 }

@@ -13,8 +13,11 @@ type Scope interface {
 	CreateScope(id string, props ScopeProps) Scope
 	GetContext(key string) any
 	SetContext(key string, value any)
-	AddApiObject(obj runtime.Object) ApiObject
+	AddApiObject(obj runtime.Object) (ApiObject, error)
+	MustAddApiObject(obj runtime.Object) ApiObject
 	AddApiObjectFromMap(props map[string]any) ApiObject
+	WalkApiObjects(walkFn func(ApiObject) error) error
+	Logger() Logger
 }
 
 type ScopeProps struct {
@@ -70,22 +73,31 @@ func (s *scope) Namespace() string {
 	return s.GetContext(namespaceContextKey).(string)
 }
 
-func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
+func (s *scope) AddApiObject(obj runtime.Object) (ApiObject, error) {
 	groupVersionKinds, _, err := s.globalContext.scheme.ObjectKinds(obj)
 	if err != nil {
-		panic(fmt.Errorf("ObjectKinds: %w", err))
+		return nil, fmt.Errorf("ObjectKinds: %w", err)
 	}
 	if len(groupVersionKinds) != 1 {
-		panic(fmt.Errorf("expected 1 groupVersionKind, got %d: %v", len(groupVersionKinds), groupVersionKinds))
+		return nil, fmt.Errorf("expected 1 groupVersionKind, got %d: %v", len(groupVersionKinds), groupVersionKinds)
 	}
 	groupVersion := groupVersionKinds[0]
 	mobj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		panic(fmt.Errorf("k8sObjectToMap: %w", err))
+		return nil, fmt.Errorf("k8sObjectToMap: %w", err)
 	}
 	mobj["apiVersion"] = groupVersion.GroupVersion().String()
 	mobj["kind"] = groupVersion.Kind
-	return s.AddApiObjectFromMap(mobj)
+	return s.AddApiObjectFromMap(mobj), nil
+}
+
+func (s *scope) MustAddApiObject(obj runtime.Object) ApiObject {
+	if apiObject, err := s.AddApiObject(obj); err != nil {
+		s.Logger().Panicf("failed to add api object: %v", err)
+		return nil
+	} else {
+		return apiObject
+	}
 }
 
 func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
@@ -103,16 +115,20 @@ func (s *scope) AddApiObjectFromMap(obj map[string]any) ApiObject {
 	return apiObject
 }
 
-func (s *scope) patchObjects(patchFn func(ApiObject) error) error {
+func (s *scope) WalkApiObjects(walkFn func(ApiObject) error) error {
 	for _, object := range s.objects {
-		if err := patchFn(object); err != nil {
-			return fmt.Errorf("PatchObject: %w", err)
+		if err := walkFn(object); err != nil {
+			return fmt.Errorf("walk objects: %w", err)
 		}
 	}
 	for _, childNode := range s.children {
-		if err := childNode.patchObjects(patchFn); err != nil {
-			return fmt.Errorf("patchObjects: %w", err)
+		if err := childNode.WalkApiObjects(walkFn); err != nil {
+			return fmt.Errorf("walk children: %w", err)
 		}
 	}
 	return nil
+}
+
+func (s *scope) Logger() Logger {
+	return s.globalContext.logger
 }
