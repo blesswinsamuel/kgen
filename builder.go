@@ -37,7 +37,7 @@ type RenderManifestsOptions struct {
 
 type Builder interface {
 	Scope
-	RenderManifests(opts RenderManifestsOptions) error
+	RenderManifests(opts RenderManifestsOptions)
 }
 
 type BuilderOptions struct {
@@ -112,9 +112,11 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 }
 
 // RenderManifests writes the ApiObjects to disk or stdout in YAML format.
-func (a *builder) RenderManifests(opts RenderManifestsOptions) error {
+func (a *builder) RenderManifests(opts RenderManifestsOptions) {
 	if opts.PatchObject != nil {
-		a.Scope.WalkApiObjects(opts.PatchObject)
+		if err := a.Scope.WalkApiObjects(opts.PatchObject); err != nil {
+			a.Logger().Panicf("PatchObject: %w", err)
+		}
 	}
 	if opts.YamlOutputType == "" {
 		opts.YamlOutputType = YamlOutputTypeSingleFile
@@ -142,20 +144,19 @@ func (a *builder) RenderManifests(opts RenderManifestsOptions) error {
 			}
 			fmt.Println(string(fileContent))
 		}
-		return nil
+		return
 	}
 	if opts.DeleteOutDir {
 		if err := os.RemoveAll(opts.Outdir); err != nil {
-			return fmt.Errorf("RemoveAll: %w", err)
+			a.Logger().Panicf("RemoveAll: %w", err)
 		}
 	}
 	if err := os.MkdirAll(opts.Outdir, 0755); err != nil {
-		return fmt.Errorf("MkdirAll: %w", err)
+		a.Logger().Panicf("MkdirAll: %w", err)
 	}
 	for filePath, fileContent := range fileContents {
 		if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
-			return fmt.Errorf("WriteFile: %w", err)
+			a.Logger().Panicf("WriteFile: %w", err)
 		}
 	}
-	return nil
 }

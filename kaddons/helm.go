@@ -19,9 +19,9 @@ import (
 )
 
 type HelmChartInfo struct {
-	Repo    string `json:"repo"`
-	Chart   string `json:"chart"`
-	Version string `json:"version"`
+	Repo    string
+	Chart   string
+	Version string
 }
 
 type HelmChartProps struct {
@@ -33,20 +33,10 @@ type HelmChartProps struct {
 	PatchObject         func(obj runtime.Object) error
 }
 
-func MustAddHelmChart(scope kgen.Scope, props HelmChartProps) {
-	if err := AddHelmChart(scope, props); err != nil {
-		scope.Logger().Panicf("failed to add helm chart")
-	}
-}
-
-func AddHelmChart(scope kgen.Scope, props HelmChartProps) error {
+func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 	opts := getOptions(scope)
 	objects, err := ExecHelmTemplateAndGetObjects(HelmTemplateOptions{
-		ChartInfo: HelmChartInfo{
-			Repo:    props.ChartInfo.Repo,
-			Chart:   props.ChartInfo.Chart,
-			Version: props.ChartInfo.Version,
-		},
+		ChartInfo:           props.ChartInfo,
 		Namespace:           scope.Namespace(),
 		ChartFileNamePrefix: props.ChartFileNamePrefix,
 		ReleaseName:         props.ReleaseName,
@@ -56,19 +46,16 @@ func AddHelmChart(scope kgen.Scope, props HelmChartProps) error {
 		Logger:              opts.Logger,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to execute helm template: %w", err)
+		scope.Logger().Panicf("failed to execute helm template: %w", err)
 	}
 	for _, object := range objects {
 		if props.PatchObject != nil {
 			if err := props.PatchObject(object); err != nil {
-				return err
+				scope.Logger().Panicf("failed to patch object: %w", err)
 			}
 		}
-		if _, err := scope.AddApiObject(object); err != nil {
-			return err
-		}
+		scope.AddApiObject(object)
 	}
-	return nil
 }
 
 type HelmTemplateOptions struct {

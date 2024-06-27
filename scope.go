@@ -13,8 +13,7 @@ type Scope interface {
 	CreateScope(id string, props ScopeProps) Scope
 	GetContext(key string) any
 	SetContext(key string, value any)
-	AddApiObject(obj runtime.Object) (ApiObject, error)
-	MustAddApiObject(obj runtime.Object) ApiObject
+	AddApiObject(obj runtime.Object) ApiObject
 	AddApiObjectFromMap(props map[string]any) ApiObject
 	WalkApiObjects(walkFn func(ApiObject) error) error
 	Logger() Logger
@@ -73,7 +72,7 @@ func (s *scope) Namespace() string {
 	return s.GetContext(namespaceContextKey).(string)
 }
 
-func (s *scope) AddApiObject(obj runtime.Object) (ApiObject, error) {
+func (s *scope) addApiObject(obj runtime.Object) (ApiObject, error) {
 	groupVersionKinds, _, err := s.globalContext.scheme.ObjectKinds(obj)
 	if err != nil {
 		return nil, fmt.Errorf("ObjectKinds: %w", err)
@@ -91,8 +90,8 @@ func (s *scope) AddApiObject(obj runtime.Object) (ApiObject, error) {
 	return s.AddApiObjectFromMap(mobj), nil
 }
 
-func (s *scope) MustAddApiObject(obj runtime.Object) ApiObject {
-	if apiObject, err := s.AddApiObject(obj); err != nil {
+func (s *scope) AddApiObject(obj runtime.Object) ApiObject {
+	if apiObject, err := s.addApiObject(obj); err != nil {
 		s.Logger().Panicf("failed to add api object: %v", err)
 		return nil
 	} else {
