@@ -41,17 +41,17 @@ func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
 		ChartFileNamePrefix: props.ChartFileNamePrefix,
 		ReleaseName:         props.ReleaseName,
 		Values:              props.Values,
-		CacheDir:            opts.CacheDir,
+		CacheDir:            path.Join(opts.CacheDir, "helm-charts"),
 		HelmKubeVersion:     opts.HelmKubeVersion,
-		Logger:              opts.Logger,
+		Logger:              opts.logger,
 	})
 	if err != nil {
-		scope.Logger().Panicf("failed to execute helm template: %w", err)
+		scope.Logger().Panicf("failed to execute helm template: %v", err)
 	}
 	for _, object := range objects {
 		if props.PatchObject != nil {
 			if err := props.PatchObject(object); err != nil {
-				scope.Logger().Panicf("failed to patch object: %w", err)
+				scope.Logger().Panicf("failed to patch object: %v", err)
 			}
 		}
 		scope.AddApiObject(object)

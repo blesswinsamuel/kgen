@@ -24,15 +24,16 @@ const (
 	YamlOutputTypeFilePerResource yamlOutputType = "resource"
 	// Each resource is output to its own file in a folder named after the scope.
 	YamlOutputTypeFolderPerScopeFilePerResource yamlOutputType = "folder"
-	// Each resource is output to its own file in a folder named after the parent scope.
-	YamlOutputTypeFolderPerParentScopeFilePerLeafScope yamlOutputType = "folder-per-parent"
+	// Resources are split into seperate files by scope, while creating a folder for each scope.
+	YamlOutputTypeFolderPerScopeFilePerLeafScope yamlOutputType = "folder-per-parent"
 )
 
 type RenderManifestsOptions struct {
-	Outdir         string
-	YamlOutputType yamlOutputType
-	DeleteOutDir   bool
-	PatchObject    func(ApiObject) error
+	Outdir                   string
+	YamlOutputType           yamlOutputType
+	IncludeNumberInFilenames bool
+	DeleteOutDir             bool
+	PatchObject              func(ApiObject) error
 }
 
 type Builder interface {
@@ -58,6 +59,9 @@ func NewBuilder(opts BuilderOptions) Builder {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(opts.SchemeBuilder.AddToScheme(scheme))
 
+	if opts.Logger == nil {
+		opts.Logger = NewCustomLogger(nil)
+	}
 	scope := newScope("__root__", ScopeProps{}, &globalContext{
 		scheme: scheme,
 		logger: opts.Logger,
@@ -69,17 +73,24 @@ func NewBuilder(opts BuilderOptions) Builder {
 
 func getObjectNameAndNamespace(apiObject ApiObject) string {
 	obj := apiObject.GetObject().(*unstructured.Unstructured)
-	namespace := obj.GetNamespace()
-	name := obj.GetName()
-	if namespace != "" {
-		return fmt.Sprintf("%s-%s", namespace, name)
+	out := []string{}
+	for _, part := range []string{obj.GetNamespace(), strings.ToLower(obj.GetKind()), obj.GetName()} {
+		if part != "" {
+			out = append(out, part)
+		}
 	}
-	return name
+	return strings.Join(out, "-")
 }
 
 func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope, currentScopeID []string, level int, opts RenderManifestsOptions) {
 	if scope == nil {
 		return
+	}
+	sprintfWithNumber := func(n int, s string) string {
+		if opts.IncludeNumberInFilenames {
+			return fmt.Sprintf("%02d-%s", n, s)
+		}
+		return s
 	}
 	if len(scope.objects) > 0 {
 		switch opts.YamlOutputType {
@@ -96,17 +107,23 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 			files[filePath] = append(files[filePath], scope.objects...)
 		case YamlOutputTypeFolderPerScopeFilePerResource:
 			filePath := path.Join(currentScopeID...)
+			if len(scope.children) > 0 {
+				filePath = path.Join(filePath, sprintfWithNumber(0, scope.ID()))
+			}
 			for i, apiObject := range scope.objects {
-				filePath := path.Join(filePath, fmt.Sprintf("%02d-%s", i+1, getObjectNameAndNamespace(apiObject)))
+				filePath := path.Join(filePath, sprintfWithNumber(i+1, getObjectNameAndNamespace(apiObject)))
 				files[filePath] = append(files[filePath], apiObject)
 			}
-		case YamlOutputTypeFolderPerParentScopeFilePerLeafScope:
-			filePath := path.Join(currentScopeID...)
+		case YamlOutputTypeFolderPerScopeFilePerLeafScope:
+			filePath := path.Join(path.Join(currentScopeID...))
+			if len(scope.children) > 0 {
+				filePath = path.Join(filePath, sprintfWithNumber(0, scope.ID()))
+			}
 			files[filePath] = append(files[filePath], scope.objects...)
 		}
 	}
 	for i, childNode := range scope.children {
-		thisScopeID := append(currentScopeID, fmt.Sprintf("%02d-%s", i+1, childNode.ID()))
+		thisScopeID := append(currentScopeID, sprintfWithNumber(i+1, childNode.ID()))
 		constructFilenameToApiObjectsMap(files, childNode, thisScopeID, level+1, opts)
 	}
 }
@@ -115,7 +132,7 @@ func constructFilenameToApiObjectsMap(files map[string][]ApiObject, scope *scope
 func (a *builder) RenderManifests(opts RenderManifestsOptions) {
 	if opts.PatchObject != nil {
 		if err := a.Scope.WalkApiObjects(opts.PatchObject); err != nil {
-			a.Logger().Panicf("PatchObject: %w", err)
+			a.Logger().Panicf("PatchObject: %v", err)
 		}
 	}
 	if opts.YamlOutputType == "" {
@@ -148,15 +165,16 @@ func (a *builder) RenderManifests(opts RenderManifestsOptions) {
 	}
 	if opts.DeleteOutDir {
 		if err := os.RemoveAll(opts.Outdir); err != nil {
-			a.Logger().Panicf("RemoveAll: %w", err)
+			a.Logger().Panicf("RemoveAll: %v", err)
 		}
 	}
-	if err := os.MkdirAll(opts.Outdir, 0755); err != nil {
-		a.Logger().Panicf("MkdirAll: %w", err)
-	}
 	for filePath, fileContent := range fileContents {
+		parentDir := path.Dir(filePath)
+		if err := os.MkdirAll(parentDir, 0755); err != nil {
+			a.Logger().Panicf("MkdirAll: %v", err)
+		}
 		if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
-			a.Logger().Panicf("WriteFile: %w", err)
+			a.Logger().Panicf("WriteFile: %v", err)
 		}
 	}
 }
