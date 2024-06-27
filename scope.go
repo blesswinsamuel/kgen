@@ -30,6 +30,7 @@ type Scope interface {
 
 // ScopeProps is the properties for creating a new scope.
 type ScopeProps struct {
+	// Namespace is the default kubernetes namespace that should be used for the k8s resources in the scope.
 	Namespace string
 }
 
