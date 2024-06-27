@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  creationTimestamp: null
+  name: my-cert
+  namespace: my-cert
+spec:
+  dnsNames:
+    - whoami.localhost
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  secretName: whoami-tls
+status: {}

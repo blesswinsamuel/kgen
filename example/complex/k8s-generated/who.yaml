@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  name: whoami-deployment
+  namespace: who
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: whoami
+    spec:
+      containers:
+        - image: containous/whoami
+          name: whoami-container
+          resources: {}
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: whoami-service
+  namespace: who
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  selector:
+    app: whoami
+status:
+  loadBalancer: {}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  creationTimestamp: null
+  name: whoami-ingress
+  namespace: who
+spec:
+  rules:
+    - host: whoami.localhost
+      http:
+        paths:
+          - backend:
+              serviceName: whoami-service
+              servicePort: http
+            path: /
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  name: whoareyou-deployment
+  namespace: who
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: whoareyou
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: whoareyou
+    spec:
+      containers:
+        - image: containous/whoami
+          name: whoareyou-container
+          resources: {}
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: whoareyou-service
+  namespace: who
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  selector:
+    app: whoareyou
+status:
+  loadBalancer: {}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  creationTimestamp: null
+  name: whoareyou-ingress
+  namespace: who
+spec:
+  rules:
+    - host: whoareyou.localhost
+      http:
+        paths:
+          - backend:
+              serviceName: whoareyou-service
+              servicePort: http
+            path: /
+status:
+  loadBalancer: {}
