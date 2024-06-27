@@ -29,11 +29,16 @@ const (
 )
 
 type RenderManifestsOptions struct {
-	Outdir                   string
-	YamlOutputType           yamlOutputType
+	// The directory to write the YAML files to. If set to "-", the YAML files will be written to stdout.
+	Outdir string
+	// The output format for the YAML files.
+	YamlOutputType yamlOutputType
+	// Include a number in the filenames to maintain order.
 	IncludeNumberInFilenames bool
-	DeleteOutDir             bool
-	PatchObject              func(ApiObject) error
+	// Delete the output directory before writing the YAML files.
+	DeleteOutDir bool
+	// PatchObject is a function that can be used to modify the ApiObjects before they are rendered.
+	PatchObject func(ApiObject) error
 }
 
 type Builder interface {
