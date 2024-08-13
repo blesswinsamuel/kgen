@@ -24,6 +24,8 @@ type Scope interface {
 	AddApiObjectFromMap(props map[string]any) ApiObject
 	// WalkApiObjects walks through all the API objects in the scope and its children.
 	WalkApiObjects(walkFn func(ApiObject) error) error
+	// Children returns the child scopes of the current scope.
+	Children() []Scope
 	// Logger returns the logger that was passed to the builder.
 	Logger() Logger
 }
@@ -137,6 +139,14 @@ func (s *scope) WalkApiObjects(walkFn func(ApiObject) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *scope) Children() []Scope {
+	children := make([]Scope, 0, len(s.children))
+	for _, childNode := range s.children {
+		children = append(children, childNode)
+	}
+	return children
 }
 
 func (s *scope) Logger() Logger {
