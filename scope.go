@@ -2,6 +2,7 @@ package kgen
 
 import (
 	"fmt"
+	"iter"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +26,7 @@ type Scope interface {
 	// WalkApiObjects walks through all the API objects in the scope and its children.
 	WalkApiObjects(walkFn func(ApiObject) error) error
 	// Children returns the child scopes of the current scope.
-	Children() []Scope
+	Children() iter.Seq[Scope]
 	// Logger returns the logger that was passed to the builder.
 	Logger() Logger
 }
@@ -141,12 +142,14 @@ func (s *scope) WalkApiObjects(walkFn func(ApiObject) error) error {
 	return nil
 }
 
-func (s *scope) Children() []Scope {
-	children := make([]Scope, 0, len(s.children))
-	for _, childNode := range s.children {
-		children = append(children, childNode)
+func (s *scope) Children() iter.Seq[Scope] {
+	return func(yield func(Scope) bool) {
+		for _, child := range s.children {
+			if !yield(child) {
+				return
+			}
+		}
 	}
-	return children
 }
 
 func (s *scope) Logger() Logger {
