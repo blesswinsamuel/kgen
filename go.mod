@@ -1,6 +1,6 @@
 module github.com/blesswinsamuel/kgen
 
-go 1.23.0
+go 1.23.4
 
 require (
 	github.com/goccy/go-yaml v1.11.3

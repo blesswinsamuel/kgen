@@ -1,6 +1,6 @@
 module github.com/blesswinsamuel/kgen/example
 
-go 1.22.3
+go 1.23.1
 
 require (
 	github.com/blesswinsamuel/kgen v0.0.1
