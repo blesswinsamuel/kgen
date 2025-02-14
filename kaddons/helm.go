@@ -46,10 +46,13 @@ type HelmChartProps struct {
 
 // AddHelmChart runs helm template and adds the generated objects to the scope.
 func AddHelmChart(scope kgen.Scope, props HelmChartProps) {
-	opts := getOptions(scope)
+	opts := getAddonsConfig(scope)
+	if props.Namespace == "" {
+		props.Namespace = scope.Namespace()
+	}
 	objects, err := execHelmTemplateAndGetObjects(helmTemplateOptions{
 		ChartInfo:           props.ChartInfo,
-		Namespace:           scope.Namespace(),
+		Namespace:           props.Namespace,
 		ChartFileNamePrefix: props.ChartFileNamePrefix,
 		ReleaseName:         props.ReleaseName,
 		Values:              props.Values,

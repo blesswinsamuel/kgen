@@ -17,11 +17,11 @@ type Options struct {
 	logger kgen.Logger
 }
 
-var optionsContextKey = kgen.GenerateContextKey()
+var configContextKey = kgen.GenerateContextKey()
 
 // SetOptions sets the options for kaddons.
 func SetOptions(scope kgen.Scope, opts Options) {
-	defaultOptions := getOptions(scope)
+	defaultOptions := getAddonsConfig(scope)
 	if opts.CacheDir == "" {
 		opts.CacheDir = defaultOptions.CacheDir
 	}
@@ -31,16 +31,16 @@ func SetOptions(scope kgen.Scope, opts Options) {
 	if opts.logger == nil {
 		opts.logger = defaultOptions.logger
 	}
-	scope.SetContext(optionsContextKey, opts)
+	scope.SetContext(configContextKey, opts)
 }
 
-func getOptions(scope kgen.Scope) Options {
-	if v := scope.GetContext(optionsContextKey); v == nil {
+func getAddonsConfig(scope kgen.Scope) Options {
+	if v := scope.GetContext(configContextKey); v == nil {
 		return Options{
 			CacheDir:        path.Join(os.TempDir(), "kgen-cache"),
 			HelmKubeVersion: "v1.30.2",
 			logger:          scope.Logger(),
 		}
 	}
-	return scope.GetContext(optionsContextKey).(Options)
+	return scope.GetContext(configContextKey).(Options)
 }
